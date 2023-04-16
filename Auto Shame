@@ -1,0 +1,103 @@
+// ==UserScript==
+// @name         Shame Mask for Moomoo
+// @namespace    https://tampermonkey.net/
+// @version      1
+// @description  Send 1000 packets per second to a player that is within 100 pixels of me whenever they automatically heal, and give them the shame mask.
+// @author       Poison
+// @match        https://moomoo.io/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const shameMaskID = 14; // ID of the shame mask
+    const healingThreshold = 40; // Threshold for automatic healing
+    let myID = -1; // My player ID
+    let shameMaskSent = false; // Whether or not the shame mask has been sent
+
+    function sendShameMask(playerID) {
+        // Check if the shame mask has already been sent
+        if (shameMaskSent) {
+            return;
+        }
+
+        // Send 1000 packets per second to the player
+        const socket = window.global.socket;
+        for (let i = 0; i < 1000; i++) {
+            socket.send(JSON.stringify({
+                type: "5",
+                id: playerID
+            }));
+        }
+
+        // Give the player the shame mask
+        socket.send(JSON.stringify({
+            type: "13",
+            id: playerID,
+            hat: shameMaskID
+        }));
+
+        shameMaskSent = true;
+    }
+
+    function getPlayerDistance(playerX, playerY) {
+        // Calculate the distance between my player and the given player
+        const myPlayer = window.global.players[myID];
+        const deltaX = playerX - myPlayer.x;
+        const deltaY = playerY - myPlayer.y;
+        return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    }
+
+    function onAutoHeal(playerID) {
+        // Check if the player is within 100 pixels of me
+        const player = window.global.players[playerID];
+        const distance = getPlayerDistance(player.x, player.y);
+        if (distance <= 100) {
+            // Send the shame mask
+            sendShameMask(playerID);
+        }
+    }
+
+    function onPlayerUpdate(playerID) {
+        // Check if the updated player is me
+        if (playerID === myID) {
+            return;
+        }
+
+        // Check if the player is automatically healing
+        const player = window.global.players[playerID];
+        if (player.hat !== healingThreshold) {
+            return;
+        }
+
+        // Check if the player is within 100 pixels of me
+        const distance = getPlayerDistance(player.x, player.y);
+        if (distance <= 100) {
+            // Send the shame mask
+            sendShameMask(playerID);
+        }
+    }
+
+    function init() {
+        // Get my player ID
+        for (let i = 0; i < window.global.players.length; i++) {
+            const player = window.global.players[i];
+            if (player && player.isPlayer && player.isYou) {
+                myID = i;
+                break;
+            }
+        }
+
+        // Add event listeners for automatic healing and player updates
+        window.global.onAutoHeal = onAutoHeal;
+        window.global.hookBefore(window, "onPlayerUpdate", onPlayerUpdate);
+    }
+
+    // Add a keybind to enable the script
+    document.addEventListener("keydown", function(event) {
+        if (event.key === "v") {
+            init();
+        }
+    });
+})();
